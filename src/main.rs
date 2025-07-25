@@ -9,7 +9,18 @@ use log::{info, LevelFilter};
 use std::panic;
 use crossterm::terminal::disable_raw_mode;
 
+use clap::Parser;
+use std::path::PathBuf; // We'll use PathBuf for safer file handling
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = "This application allows you to view the content of a log file.")]
+struct Cli {
+    filename: PathBuf, 
+}
+
 fn main() -> Result<()> {
+    let args= Cli::parse();
+
     let target = Box::new(std::fs::File::create("app.log").unwrap());
 
     Builder::new()
@@ -38,9 +49,13 @@ fn main() -> Result<()> {
     }));
 
     info!("Starting log viewer application");
-
-    let mut controller = controller::Controller::new("log.txt")?;
-    controller.run()?;
+    if let Some(path) = args.filename.to_str() {
+        let mut controller = controller::Controller::new(path)?;
+        controller.run()?;
+    } else {
+        eprintln!("Invalid file path provided.");
+        return Err(anyhow::anyhow!("Invalid file path"));
+    }
 
     Ok(())
 }
