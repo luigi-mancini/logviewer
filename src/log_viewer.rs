@@ -123,13 +123,6 @@ impl LogViewer {
         fg_matches.sort_by_key(|(start, _, _)| *start);
         bg_matches.sort_by_key(|(start, _)| *start);
 
-        // Helper function to check if a position falls within any background match
-        let has_background = |pos: usize| -> bool {
-            bg_matches
-                .iter()
-                .any(|(start, end)| pos >= *start && pos < *end)
-        };
-
         // Create a list of all position changes (start/end of any match)
         let mut positions = std::collections::BTreeSet::new();
         positions.insert(0); // Always start at beginning
@@ -202,9 +195,10 @@ impl LogViewer {
                 let end_pos = num_lines_to_print * cols - 5; // Reserve space for "..."
                 self.print_line_with_highlight(&line.data[..end_pos])?;
                 //self.stdout.queue(Print(&line.data[..end_pos]))?;
-                self.stdout.queue(Print("[...]".red()))?;
+                self.stdout.queue(Print("[...]\r\n".red()))?;
             } else {
                 self.print_line_with_highlight(&line.data)?;
+                self.stdout.queue(Print("\r\n"))?;
             }
 
             for _ in 0..num_lines_to_print {
@@ -216,7 +210,6 @@ impl LogViewer {
             }
 
             rows -= num_lines_to_print;
-            self.stdout.queue(cursor::MoveToNextLine(1))?;
         }
 
         self.stdout.queue(cursor::MoveTo(
