@@ -179,7 +179,6 @@ impl LogViewer {
 
     pub fn print_screen(&mut self, lines: &[Line]) -> Result<Vec<usize>> {
         let (mut rows, cols) = self.get_row_cols()?;
-
         self.stdout.queue(cursor::MoveTo(0, 0))?;
 
         let mut line_numbers: Vec<usize> = Vec::new();
@@ -187,9 +186,13 @@ impl LogViewer {
         for line in lines.iter() {
             let line_len = line.data.len();
 
-            let mut num_lines_to_print = line_len / cols + if line_len % cols > 0 { 1 } else { 0 };
+            let mut num_lines_to_print = if line_len == 0 {
+	        1
+	    } else {
+	        line_len / cols + if line_len % cols > 0 { 1 } else { 0 }
+            };
             num_lines_to_print = num_lines_to_print.min(3).min(rows);
-
+	    
             if line_len > num_lines_to_print * cols {
                 // Truncate long lines
                 let end_pos = num_lines_to_print * cols - 5; // Reserve space for "..."
