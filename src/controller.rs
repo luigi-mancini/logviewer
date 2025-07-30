@@ -282,9 +282,10 @@ impl Controller {
             }
             KeyCode::Char('G') | KeyCode::Char('>')=> {
                 // Go to the last line
-                let total_lines = self.get_active_log_file().total_lines();
+                (self.start_line, self.end_line) = self.log_file.get_end_of_file(self.rows, self.cols, 3);
+                /*let total_lines = self.get_active_log_file().total_lines();
                 self.start_line = total_lines.saturating_sub(self.rows);
-                self.end_line = total_lines;
+                self.end_line = total_lines; */
                 self.cursor = (0, 0);
                 self.log_viewer.set_cursor(0, 0)?;
             }

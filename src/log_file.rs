@@ -27,6 +27,7 @@ impl<'a> Line<'a> {
 pub struct LogFile {
     mmap: Mmap,
     line_starts: Vec<usize>,
+    line_lengths: Vec<usize>,
     line_visibility: Vec<bool>,
     backup_visibility: Option<Vec<bool>>,
     total_lines: usize,
@@ -38,12 +39,36 @@ impl LogFile {
         let file = File::open(path)?;
         let mmap = unsafe { Mmap::map(&file)? };
 
+        if mmap.is_empty() {
+            return Ok(LogFile {
+                mmap,
+                line_starts: vec![0],
+                line_lengths: vec![0],
+                line_visibility: vec![true],
+                backup_visibility: None,
+                total_lines: 1,
+            });
+        }
+
         // Build line index by scanning for newlines
         let mut line_starts = vec![0]; // First line starts at 0
+        let mut line_lengths = Vec::new();
 
         for (pos, &byte) in mmap.iter().enumerate() {
             if byte == b'\n' {
-                line_starts.push(pos + 1);
+                let mut len = pos - line_starts.last().unwrap();
+                if len > 0 && mmap[pos - 1] == b'\r' {
+                    len -= 1; // Adjust for CRLF
+                }
+                line_lengths.push(len);
+                line_starts.push(pos + 1); // Start of next line is after the newline
+            }
+        }
+
+        // Push the length of the last line if the file doesn't end with a newline
+        if let Some(&last_start) = line_starts.last() {
+            if last_start < mmap.len() {
+                line_lengths.push(mmap.len() - last_start);
             }
         }
 
@@ -58,6 +83,7 @@ impl LogFile {
         Ok(LogFile {
             mmap,
             line_starts,
+            line_lengths,
             line_visibility,
             backup_visibility: None,
             total_lines,
@@ -212,6 +238,62 @@ impl LogFile {
         result
     }
 
+    pub fn num_lines_to_print(line_len: usize, cols: usize, max_lines:usize, rows_left: usize) -> usize {
+        let num_lines_to_print = if line_len == 0 {
+            1
+        } else {
+            line_len / cols + if line_len % cols > 0 { 1 } else { 0 }
+        };
+        num_lines_to_print.min(max_lines).min(rows_left)
+    }
+
+    pub fn get_end_of_file(&self, rows: usize, cols: usize, max_row_per_line: usize) -> (usize, usize) {
+
+        let mut start_line = None;
+        let mut end_line = None;
+        for i in (0..self.total_lines).rev() {
+            if self.is_line_visible(i) {
+                end_line = Some(i);
+                break;
+            }
+        }
+
+        if let Some(end_line) = end_line {
+            let mut row_count = Self::num_lines_to_print(
+                self.line_lengths[end_line],
+                cols,
+                max_row_per_line,
+                rows,
+            );
+
+            for i in (0..end_line).rev() {
+                if self.is_line_visible(i) {
+                    row_count += Self::num_lines_to_print(
+                        self.line_lengths[i],
+                        cols,
+                        max_row_per_line,
+                        rows - row_count,
+                    );
+                }
+                if row_count >= rows {
+                    if row_count == rows {
+                        start_line = Some(i);
+                    }
+                    break;
+                }
+            }
+
+            if let Some(start_line) = start_line {
+                return (start_line, end_line);
+            } else {
+                return (end_line, end_line); 
+            }
+
+        } else {
+            (0, 0) // No visible lines
+        }
+    }
+
     pub fn search(
         &self,
         pattern: &str,
@@ -348,7 +430,10 @@ mod tests {
 
     #[test]
     fn test_search() {
-        let test_content = "Error: something bad\nInfo: all good\nError: another issue\n";
+        let test_content = "Error: something bad
+Info: all good
+Error: another issue
+";
         let file = create_test_file(test_content);
 
         let viewer = LogFile::new(file.path()).unwrap();
@@ -360,4 +445,38 @@ mod tests {
         let info_lines = viewer.search("Info", 0, true, SearchDirection::Forward);
         assert_eq!(info_lines, Some(1));
     }
+
+    #[test]
+    fn test_line_lengths() {
+        // Test with \n line endings
+        let test_content_lf = "line 1\nline 22\nline 333\n";
+        let file_lf = create_test_file(test_content_lf);
+        let viewer_lf = LogFile::new(file_lf.path()).unwrap();
+        assert_eq!(viewer_lf.line_lengths, vec![6, 7, 8]);
+
+        // Test with \r\n line endings
+        let test_content_crlf = "line 1\r\nline 22\r\nline 333\r\n";
+        let file_crlf = create_test_file(test_content_crlf);
+        let viewer_crlf = LogFile::new(file_crlf.path()).unwrap();
+        assert_eq!(viewer_crlf.line_lengths, vec![6, 7, 8]);
+
+        // Test with mixed line endings
+        let test_content_mixed = "line 1\nline 22\r\nline 333\n";
+        let file_mixed = create_test_file(test_content_mixed);
+        let viewer_mixed = LogFile::new(file_mixed.path()).unwrap();
+        assert_eq!(viewer_mixed.line_lengths, vec![6, 7, 8]);
+
+        // Test with no trailing newline
+        let test_content_no_newline = "line 1\nline 22";
+        let file_no_newline = create_test_file(test_content_no_newline);
+        let viewer_no_newline = LogFile::new(file_no_newline.path()).unwrap();
+        assert_eq!(viewer_no_newline.line_lengths, vec![6, 7]);
+
+        // Test with empty file
+        let test_content_empty = "";
+        let file_empty = create_test_file(test_content_empty);
+        let viewer_empty = LogFile::new(file_empty.path()).unwrap();
+        assert_eq!(viewer_empty.line_lengths, vec![0]);
+    }
+
 }
