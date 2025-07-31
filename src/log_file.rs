@@ -248,10 +248,14 @@ impl LogFile {
     }
 
     pub fn get_end_of_file(&self, rows: usize, cols: usize, max_row_per_line: usize) -> (usize, usize) {
+        self.get_pos_from_end_line(self.total_lines, rows, cols, max_row_per_line)
+    }
+
+    pub fn get_pos_from_end_line(&self, end_pos: usize, rows: usize, cols: usize, max_row_per_line: usize) -> (usize, usize) {
 
         let mut start_line = None;
         let mut end_line = None;
-        for i in (0..self.total_lines).rev() {
+        for i in (0..end_pos).rev() {
             if self.is_line_visible(i) {
                 end_line = Some(i);
                 break;
@@ -272,18 +276,22 @@ impl LogFile {
                         self.line_lengths[i],
                         cols,
                         max_row_per_line,
-                        rows - row_count,
+                        max_row_per_line,
                     );
                 }
-                if row_count >= rows {
-                    if row_count == rows {
-                        start_line = Some(i);
-                    }
+
+		debug!("EOF row_count {}  rows{}", row_count, rows);
+		if row_count <= rows {
+		    start_line = Some(i);
+		}
+
+		if row_count >= rows {
                     break;
                 }
             }
 
             if let Some(start_line) = start_line {
+	        debug!("Get end of file {} {}", start_line, end_line);
                 return (start_line, end_line);
             } else {
                 return (end_line, end_line); 

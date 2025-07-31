@@ -283,9 +283,6 @@ impl Controller {
             KeyCode::Char('G') | KeyCode::Char('>')=> {
                 // Go to the last line
                 (self.start_line, self.end_line) = self.log_file.get_end_of_file(self.rows, self.cols, 3);
-                /*let total_lines = self.get_active_log_file().total_lines();
-                self.start_line = total_lines.saturating_sub(self.rows);
-                self.end_line = total_lines; */
                 self.cursor = (0, 0);
                 self.log_viewer.set_cursor(0, 0)?;
             }
@@ -343,16 +340,7 @@ impl Controller {
 
     fn page_up(&mut self) {
         debug!("Page up called");
-
-        if self.start_line > 0 {
-            debug!(
-                "Page up called. start{} end{} rows{}",
-                self.start_line, self.end_line, self.rows
-            );
-            self.start_line = self.start_line.saturating_sub(self.rows);
-            self.end_line =
-                (self.start_line + self.rows).min(self.get_active_log_file().total_lines());
-        }
+	(self.start_line, self.end_line) = self.log_file.get_pos_from_end_line(self.start_line, self.rows, self.cols, 3);
     }
 
     fn page_down(&mut self) {
